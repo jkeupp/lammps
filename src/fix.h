@@ -118,6 +118,8 @@ class Fix : protected Pointers {
   virtual void setup_pre_reverse(int, int) {}
   virtual void min_setup(int) {}
   virtual void initial_integrate(int) {}
+  virtual void second_integrate(int) {}
+  virtual void third_integrate(int) {}
   virtual void post_integrate() {}
   virtual void pre_exchange() {}
   virtual void pre_neighbor() {}
@@ -268,6 +270,8 @@ namespace FixConst {
   static const int MIN_POST_FORCE =          1<<22;
   static const int MIN_ENERGY =              1<<23;
   static const int FIX_CONST_LAST =          1<<24;
+  static const int SECOND_INTEGRATE =        1<<25;
+  static const int THIRD_INTEGRATE =         1<<26;
 }
 
 }

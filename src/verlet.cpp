@@ -223,19 +223,13 @@ void Verlet::setup_minimal(int flag)
 void Verlet::run(int n)
 {
   bigint ntimestep;
-  int nflag,sortflag;
-
   int n_post_integrate = modify->n_post_integrate;
-  int n_pre_exchange = modify->n_pre_exchange;
-  int n_pre_neighbor = modify->n_pre_neighbor;
-  int n_post_neighbor = modify->n_post_neighbor;
-  int n_pre_force = modify->n_pre_force;
-  int n_pre_reverse = modify->n_pre_reverse;
   int n_post_force = modify->n_post_force;
   int n_end_of_step = modify->n_end_of_step;
-
-  if (atom->sortfreq > 0) sortflag = 1;
-  else sortflag = 0;
+  int n_initial_integrate = modify->n_initial_integrate;
+  int n_second_integrate = modify->n_second_integrate;
+  int n_third_integrate = modify->n_third_integrate;
+  int n_final_integrate = modify->n_final_integrate;
 
   for (int i = 0; i < n; i++) {
     if (timer->check_timeout(i)) {
@@ -249,97 +243,28 @@ void Verlet::run(int n)
     // initial time integration
 
     timer->stamp();
-    modify->initial_integrate(vflag);
-    if (n_post_integrate) modify->post_integrate();
+    if (n_initial_integrate) {
+      modify->initial_integrate(vflag);
+      if (n_post_integrate) modify->post_integrate();
+    }
     timer->stamp(Timer::MODIFY);
-
-    // regular communication vs neighbor list rebuild
-
-    nflag = neighbor->decide();
-
-    if (nflag == 0) {
-      timer->stamp();
-      comm->forward_comm();
-      timer->stamp(Timer::COMM);
-    } else {
-      if (n_pre_exchange) {
-        timer->stamp();
-        modify->pre_exchange();
-        timer->stamp(Timer::MODIFY);
-      }
-      if (triclinic) domain->x2lamda(atom->nlocal);
-      domain->pbc();
-      if (domain->box_change) {
-        domain->reset_box();
-        comm->setup();
-        if (neighbor->style) neighbor->setup_bins();
-      }
-      timer->stamp();
-      comm->exchange();
-      if (sortflag && ntimestep >= atom->nextsort) atom->sort();
-      comm->borders();
-      if (triclinic) domain->lamda2x(atom->nlocal+atom->nghost);
-      timer->stamp(Timer::COMM);
-      if (n_pre_neighbor) {
-        modify->pre_neighbor();
-        timer->stamp(Timer::MODIFY);
-      }
-      neighbor->build(1);
-      timer->stamp(Timer::NEIGH);
-      if (n_post_neighbor) {
-        modify->post_neighbor();
-        timer->stamp(Timer::MODIFY);
-      }
+    if (n_second_integrate) {
+        if (n_initial_integrate)
+          prep_next_partialstep(ntimestep);
+        modify->second_integrate(vflag);
     }
 
-    // force computations
-    // important for pair to come before bonded contributions
-    // since some bonded potentials tally pairwise energy/virial
-    // and Pair:ev_tally() needs to be called before any tallying
-
-    force_clear();
-
-    timer->stamp();
-
-    if (n_pre_force) {
-      modify->pre_force(vflag);
-      timer->stamp(Timer::MODIFY);
+    if (n_third_integrate) {
+        prep_next_partialstep(ntimestep);
+        modify->third_integrate(vflag);
     }
 
-    if (pair_compute_flag) {
-      force->pair->compute(eflag,vflag);
-      timer->stamp(Timer::PAIR);
+    if (n_final_integrate) {
+      prep_next_partialstep(ntimestep);
+      // force modifications, final time integration, diagnostics
+      if (n_post_force) modify->post_force(vflag);
+      modify->final_integrate();
     }
-
-    if (atom->molecular) {
-      if (force->bond) force->bond->compute(eflag,vflag);
-      if (force->angle) force->angle->compute(eflag,vflag);
-      if (force->dihedral) force->dihedral->compute(eflag,vflag);
-      if (force->improper) force->improper->compute(eflag,vflag);
-      timer->stamp(Timer::BOND);
-    }
-
-    if (kspace_compute_flag) {
-      force->kspace->compute(eflag,vflag);
-      timer->stamp(Timer::KSPACE);
-    }
-
-    if (n_pre_reverse) {
-      modify->pre_reverse(eflag,vflag);
-      timer->stamp(Timer::MODIFY);
-    }
-
-    // reverse communication of forces
-
-    if (force->newton) {
-      comm->reverse_comm();
-      timer->stamp(Timer::COMM);
-    }
-
-    // force modifications, final time integration, diagnostics
-
-    if (n_post_force) modify->post_force(vflag);
-    modify->final_integrate();
     if (n_end_of_step) modify->end_of_step();
     timer->stamp(Timer::MODIFY);
 
@@ -350,6 +275,102 @@ void Verlet::run(int n)
       output->write(ntimestep);
       timer->stamp(Timer::OUTPUT);
     }
+  }
+}
+
+/* ----------------------------------------------------------------------
+   prepare for the next partial step within one verlet step
+------------------------------------------------------------------------- */
+
+void Verlet::prep_next_partialstep(bigint ntimestep)
+{
+  int nflag = neighbor->decide();
+  int sortflag;
+  if (atom->sortfreq > 0) sortflag = 1;
+  else sortflag = 0;
+  int n_pre_exchange = modify->n_pre_exchange;
+  int n_pre_neighbor = modify->n_pre_neighbor;
+  int n_post_neighbor = modify->n_post_neighbor;
+  int n_pre_force = modify->n_pre_force;
+  int n_pre_reverse = modify->n_pre_reverse;
+  // regular communication vs neighbor list rebuild
+  if (nflag == 0) {
+    timer->stamp();
+    comm->forward_comm();
+    timer->stamp(Timer::COMM);
+  } else {
+    if (n_pre_exchange) {
+      timer->stamp();
+      modify->pre_exchange();
+      timer->stamp(Timer::MODIFY);
+    }
+    if (triclinic) domain->x2lamda(atom->nlocal);
+    domain->pbc();
+    if (domain->box_change) {
+      domain->reset_box();
+      comm->setup();
+      if (neighbor->style) neighbor->setup_bins();
+    }
+    timer->stamp();
+    comm->exchange();
+    if (sortflag && ntimestep >= atom->nextsort) atom->sort();
+    comm->borders();
+    if (triclinic) domain->lamda2x(atom->nlocal+atom->nghost);
+    timer->stamp(Timer::COMM);
+    if (n_pre_neighbor) {
+      modify->pre_neighbor();
+      timer->stamp(Timer::MODIFY);
+    }
+    neighbor->build(1);
+    timer->stamp(Timer::NEIGH);
+    if (n_post_neighbor) {
+      modify->post_neighbor();
+      timer->stamp(Timer::MODIFY);
+    }
+  }
+
+  // force computations
+  // important for pair to come before bonded contributions
+  // since some bonded potentials tally pairwise energy/virial
+  // and Pair:ev_tally() needs to be called before any tallying
+
+  force_clear();
+
+  timer->stamp();
+
+  if (n_pre_force) {
+    modify->pre_force(vflag);
+    timer->stamp(Timer::MODIFY);
+  }
+
+  if (pair_compute_flag) {
+    force->pair->compute(eflag,vflag);
+    timer->stamp(Timer::PAIR);
+  }
+
+  if (atom->molecular) {
+    if (force->bond) force->bond->compute(eflag,vflag);
+    if (force->angle) force->angle->compute(eflag,vflag);
+    if (force->dihedral) force->dihedral->compute(eflag,vflag);
+    if (force->improper) force->improper->compute(eflag,vflag);
+    timer->stamp(Timer::BOND);
+  }
+
+  if (kspace_compute_flag) {
+    force->kspace->compute(eflag,vflag);
+    timer->stamp(Timer::KSPACE);
+  }
+
+  if (n_pre_reverse) {
+    modify->pre_reverse(eflag,vflag);
+    timer->stamp(Timer::MODIFY);
+  }
+
+  // reverse communication of forces
+
+  if (force->newton) {
+    comm->reverse_comm();
+    timer->stamp(Timer::COMM);
   }
 }
 
