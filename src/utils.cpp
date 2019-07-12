@@ -17,6 +17,8 @@
 #include "lammps.h"
 #include "error.h"
 
+#include <cstdlib>
+
 /*! \file utils.cpp */
 
 /*
