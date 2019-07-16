@@ -13,8 +13,8 @@
 
 #ifdef FIX_CLASS
 
-FixStyle(python/invoke,FixPythonInvoke)
 FixStyle(python,FixPythonInvoke)
+FixStyle(python/invoke,FixPythonInvoke)
 
 #else
 
@@ -32,10 +32,14 @@ class FixPythonInvoke : public Fix {
   int setmask();
   virtual void end_of_step();
   virtual void post_force(int);
+  virtual void min_setup(int);
+  virtual void min_post_force(int);
+  virtual double compute_scalar();
 
  private:
   void * pFunc;
   int selected_callback;
+  double py_energy; //RS eternal energy returned by python callback (post_force only!)
 };
 
 }

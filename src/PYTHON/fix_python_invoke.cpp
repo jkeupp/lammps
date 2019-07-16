@@ -50,6 +50,9 @@ FixPythonInvoke::FixPythonInvoke(LAMMPS *lmp, int narg, char **arg) :
   } else {
     error->all(FLERR,"Unsupported callback name for fix python/invoke");
   }
+  // RS call min_post_force in addition
+  selected_callback |= MIN_POST_FORCE;
+  selected_callback |= THERMO_ENERGY;
 
   // get Python function
   PyGILState_STATE gstate = PyGILState_Ensure();
@@ -106,7 +109,38 @@ void FixPythonInvoke::post_force(int vflag)
   PyObject * arglist = Py_BuildValue("(Oi)", ptr, vflag);
 
   PyObject * result = PyEval_CallObject((PyObject*)pFunc, arglist);
+
+  //RS now extract float value from result and set it to py_energy
+  //  TODO: what about virial? if vflag is True?
+  if (!result) {
+    PyErr_Print();
+    PyErr_Clear();
+    PyGILState_Release(gstate);
+    error->all(FLERR,"Calling external Python energy function failed .. no energy returned");
+    }
+  py_energy = PyFloat_AsDouble(result);
+  Py_DECREF(result);
+  //RS end
+
   Py_DECREF(arglist);
 
   PyGILState_Release(gstate);
+}
+
+/* ---------------------------------------------------------------------- */
+/*  RS .. add callback for minimize                                       */
+
+void FixPythonInvoke::min_setup(int vflag)
+{
+  post_force(vflag);
+}
+
+void FixPythonInvoke::min_post_force(int vflag)
+{
+  post_force(vflag);
+}
+
+double FixPythonInvoke::compute_scalar()
+{
+  return py_energy;
 }
