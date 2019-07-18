@@ -39,7 +39,7 @@ class FixPythonInvoke : public Fix {
  private:
   void * pFunc;
   int selected_callback;
-  double py_energy; //RS eternal energy returned by python callback (post_force only!)
+  double py_energy; //RS external energy returned by python callback (post_force only!)
 };
 
 }
