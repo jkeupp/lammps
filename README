@@ -1,3 +1,10 @@
+
+WARNING: This is a somewhat modified version of lammps. Some things
+work only with the corresponding pylmps wrapper developed by the CMC
+group in Bochum for our MOF+ project.
+
+----------------------------------------------------------------------
+
 This is the LAMMPS software package.
 
 LAMMPS stands for Large-scale Atomic/Molecular Massively Parallel
