@@ -143,12 +143,12 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
     } else {
       error->all(FLERR, "Invalid argument to dump h5md");
     }
-  printf("DUMP PDLP .. all arguments parsed\n");
-  printf("every_xyz %d\n", every_xyz);
-  printf("every_vel %d\n", every_vel);
-  printf("every_forces %d\n", every_forces);
-  printf("every_charges %d\n", every_charges);
-  printf("every_cell %d\n", every_cell);
+  // printf("DUMP PDLP .. all arguments parsed\n");
+  // printf("every_xyz %d\n", every_xyz);
+  // printf("every_vel %d\n", every_vel);
+  // printf("every_forces %d\n", every_forces);
+  // printf("every_charges %d\n", every_charges);
+  // printf("every_cell %d\n", every_cell);
   }
 
   // allocate global array for atom coords
@@ -229,29 +229,29 @@ void DumpPDLP::openfile()
 
     if (every_xyz>0) {
       xyz_dset    = H5Dopen(traj_group, "xyz", H5P_DEFAULT);
-      printf("pdlp xyz dset opened\n");
+      // printf("pdlp xyz dset opened\n");
     }
     if (every_image>0) {
       img_dset    = H5Dopen(traj_group, "imgidx", H5P_DEFAULT);
-      printf("pdlp img dset opened\n");
+      // printf("pdlp img dset opened\n");
     }
     if (every_vel>0) {
       vel_dset    = H5Dopen(traj_group, "vel", H5P_DEFAULT);
-      printf("pdlp vel dset opened\n");
+      // printf("pdlp vel dset opened\n");
     }
     if (every_forces>0) {
       forces_dset = H5Dopen(traj_group, "forces", H5P_DEFAULT);
-      printf("pdlp forces dset opened\n");
+      // printf("pdlp forces dset opened\n");
     }
     if (every_charges>0) {
       charges_dset = H5Dopen(traj_group, "charges", H5P_DEFAULT);
-      printf("pdlp charges dset opened\n");
+      // printf("pdlp charges dset opened\n");
     }
     if (every_restart>0) {
       rest_xyz_dset = H5Dopen(restart_group, "xyz", H5P_DEFAULT);
       rest_vel_dset = H5Dopen(restart_group, "vel", H5P_DEFAULT);
       rest_cell_dset = H5Dopen(restart_group, "cell", H5P_DEFAULT);
-      printf("pdlp restart dsets opened\n");
+      // printf("pdlp restart dsets opened\n");
     }
 
     dims[0] = natoms;
