@@ -68,10 +68,9 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
   if (binary || compressed || multifile || multiproc)
     error->all(FLERR,"Invalid dump pdlp filename");
 
-  if (domain->triclinic!=0)
-    error->all(FLERR,"Invalid domain for dump pdlp. Only orthorombic domains supported.");
+//  if (domain->triclinic!=0)
+//    error->all(FLERR,"Invalid domain for dump pdlp. Only orthorombic domains supported.");
 
-  size_one = 6;
   sort_flag = 1;
   sortcol = 0;
   format_default = NULL;
@@ -87,10 +86,10 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
   every_forces = -1;
   every_charges = -1;
   every_cell = -1;
+  every_restart = -1;
 
   int iarg=5;
   int n_parsed, default_every;
-  size_one=0;
   if (every_dump==0) default_every=0; else default_every=1;
 
   while (iarg<narg) {
@@ -100,7 +99,6 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
       n_parsed = element_args(narg-iarg, &arg[iarg], &every_xyz);
       if (n_parsed<0) error->all(FLERR, "Illegal dump pdlp command");
       iarg += n_parsed;
-      size_one+=domain->dimension;
     } else if (strcmp(arg[iarg], "stage")==0) {
       if (iarg+1>=narg) {
         error->all(FLERR, "Invalid number of arguments in dump pdlp");
@@ -115,7 +113,6 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
     } else if (strcmp(arg[iarg], "xyz_img")==0) {
       if (every_xyz<0) error->all(FLERR, "Illegal dump pdlp command");
       iarg+=1;
-      size_one+=domain->dimension;
       every_image = every_xyz;
     } else if (strcmp(arg[iarg], "vel")==0) {
       every_vel = default_every;
@@ -123,14 +120,12 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
       n_parsed = element_args(narg-iarg, &arg[iarg], &every_vel);
       if (n_parsed<0) error->all(FLERR, "Illegal dump h5md command");
       iarg += n_parsed;
-      size_one+=domain->dimension;
     } else if (strcmp(arg[iarg], "forces")==0) {
       every_forces = default_every;
       iarg+=1;
       n_parsed = element_args(narg-iarg, &arg[iarg], &every_forces);
       if (n_parsed<0) error->all(FLERR, "Illegal dump h5md command");
       iarg += n_parsed;
-      size_one+=domain->dimension;
     } else if (strcmp(arg[iarg], "charges")==0) {
       if (!atom->q_flag)
         error->all(FLERR, "Requesting non-allocated quantity q in dump_pdlp");
@@ -139,16 +134,15 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
       n_parsed = element_args(narg-iarg, &arg[iarg], &every_charges);
       if (n_parsed<0) error->all(FLERR, "Illegal dump pdlp command");
       iarg += n_parsed;
-      size_one+=1;
+    } else if (strcmp(arg[iarg], "restart")==0) {
+      every_restart = default_every;
+      iarg+=1;
+      n_parsed = element_args(narg-iarg, &arg[iarg], &every_restart);
+      if (n_parsed<0) error->all(FLERR, "Illegal dump h5md command");
+      iarg += n_parsed;
     } else {
       error->all(FLERR, "Invalid argument to dump h5md");
     }
-  // printf("DUMP PDLP .. all arguments parsed\n");
-  // printf("every_xyz %d\n", every_xyz);
-  // printf("every_vel %d\n", every_vel);
-  // printf("every_forces %d\n", every_forces);
-  // printf("every_charges %d\n", every_charges);
-  // printf("every_cell %d\n", every_cell);
   }
 
   // allocate global array for atom coords
@@ -156,11 +150,11 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
   bigint n = group->count(igroup);
   natoms = static_cast<int> (n);
 
-  if (every_xyz>=0)
+  if ((every_xyz>=0) || (every_restart>=0))
     memory->create(dump_xyz,domain->dimension*natoms,"dump:xyz");
   if (every_image>=0)
     memory->create(dump_img,domain->dimension*natoms,"dump:xyz_img");
-  if (every_vel>=0)
+  if ((every_vel>=0) || (every_restart>=0))
     memory->create(dump_vel,domain->dimension*natoms,"dump:vel");
   if (every_forces>=0)
     memory->create(dump_forces,domain->dimension*natoms,"dump:forces");
@@ -177,16 +171,18 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
 DumpPDLP::~DumpPDLP()
 {
   //  needs fixing!! RS
-  if (every_xyz>=0) {
+  if (every_xyz>=0 || every_restart>= 0) 
     memory->destroy(dump_xyz);
+  if (every_xyz>=0) {
     if (me==0) H5Dclose(xyz_dset);    
   }
   if (every_image>=0) {
     memory->destroy(dump_img);
     if (me==0) H5Dclose(img_dset);    
   }
-  if (every_vel>=0) {
+  if (every_vel>=0 || every_restart>=0) 
     memory->destroy(dump_vel);
+  if (every_vel>=0) { 
     if (me==0) H5Dclose(vel_dset);    
   }
   if (every_forces>=0) {
@@ -197,6 +193,12 @@ DumpPDLP::~DumpPDLP()
     memory->destroy(dump_charges);
     if (me==0) H5Dclose(charges_dset);    
   }
+  if (every_restart>=0 && me==0) {
+    H5Dclose(rest_xyz_dset);    
+    H5Dclose(rest_vel_dset);    
+    H5Dclose(rest_cell_dset);    
+  }
+
   if (me==0){
     H5Gclose(traj_group);
     H5Gclose(stage_group);
@@ -225,7 +227,7 @@ void DumpPDLP::openfile()
     stage_group = H5Gopen(pdlpfile, stage_name, H5P_DEFAULT);
     traj_group  = H5Gopen(stage_group, "traj", H5P_DEFAULT);
     restart_group = H5Gopen(stage_group, "restart", H5P_DEFAULT);
-    printf("pdlp file opened   %d %d %d %d\n", pdlpfile, stage_group, traj_group, restart_group);
+    // printf("pdlp file opened   %d %d %d %d\n", pdlpfile, stage_group, traj_group, restart_group);
 
     if (every_xyz>0) {
       xyz_dset    = H5Dopen(traj_group, "xyz", H5P_DEFAULT);
@@ -339,7 +341,7 @@ void DumpPDLP::write_data(int n, double *mybuf)
   int k_chg = ntotal;
 
   for (int i = 0; i < n; i++) {
-    if (every_xyz>=0) {
+    if (every_xyz>=0 || every_restart>=0) {
       for (int j=0; j<dim; j++) {
         dump_xyz[k++] = mybuf[m++];
       }
@@ -348,7 +350,7 @@ void DumpPDLP::write_data(int n, double *mybuf)
           dump_img[k_img++] = mybuf[m++];
         }
     }
-    if (every_vel>=0)
+    if (every_vel>=0 || every_restart>=0)
       for (int j=0; j<dim; j++) {
         dump_vel[k_vel++] = mybuf[m++];
       }
@@ -405,6 +407,12 @@ void DumpPDLP::write_frame()
   cell[0] = boxxhi - boxxlo;
   cell[4] = boxyhi - boxylo;
   cell[8] = boxzhi - boxzlo;
+  if (domain->triclinic!=0) {
+    // this is a triclinic simulation so write the offdiag values
+    cell[3] = boxxy;
+    cell[6] = boxxz;
+    cell[7] = boxyz; 
+  }
   
   if (every_xyz>0) {
     if (local_step % (every_xyz*every_dump) == 0) {
@@ -412,7 +420,7 @@ void DumpPDLP::write_frame()
     }
   }
   if (every_cell>0 && local_step % (every_cell*every_dump) == 0) {
-    statcode = append_data(cell_dset, 3, dump_cell);
+    statcode = append_data(cell_dset, 3, cell);
   }  
   if (every_vel>0 && local_step % (every_vel*every_dump) == 0) {
     statcode = append_data(vel_dset, 3, dump_vel);
@@ -422,6 +430,14 @@ void DumpPDLP::write_frame()
   }
   if (every_charges>0 && local_step % (every_charges*every_dump) == 0) {
     statcode = append_data(charges_dset, 2, dump_charges);
+  }
+
+  if (every_restart>0){
+    if (local_step % (every_restart*every_dump) == 0) {
+      statcode = append_data(rest_xyz_dset, 3, dump_xyz);
+      statcode = append_data(rest_vel_dset, 3, dump_vel);
+      statcode = append_data(rest_cell_dset, 3, cell);
+    }
   }
 }
 

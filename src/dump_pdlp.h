@@ -63,7 +63,6 @@ class DumpPDLP : public Dump {
   int every_forces;
   double *dump_charges;
   int every_charges;
-  double *dump_cell;
   int every_cell;
 
   int every_restart;
