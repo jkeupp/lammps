@@ -76,6 +76,7 @@ class DumpPDLP : public Dump {
 
   void write_frame();
   int append_data(hid_t, int, double *);
+  int write_data(hid_t, int, double *);
 };
 
 }
