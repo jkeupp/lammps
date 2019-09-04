@@ -140,6 +140,12 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
       if (n_parsed<0) error->all(FLERR, "Illegal dump pdlp command");
       iarg += n_parsed;
       size_one+=1;
+    } else if (strcmp(arg[iarg], "cell")==0) {
+      every_cell = default_every;
+      iarg+=1;
+      n_parsed = element_args(narg-iarg, &arg[iarg], &every_cell);
+      if (n_parsed<0) error->all(FLERR, "Illegal dump h5md command");
+      iarg += n_parsed;
     } else if (strcmp(arg[iarg], "restart")==0) {
       every_restart = default_every;
       iarg+=1;
@@ -147,6 +153,7 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
       if (n_parsed<0) error->all(FLERR, "Illegal dump h5md command");
       iarg += n_parsed;
     } else {
+      printf("DEBUG iarg: %d arg[iarg] %s\n", iarg, arg[iarg]);
       error->all(FLERR, "Invalid argument to dump h5md");
     }
   }
@@ -220,6 +227,9 @@ DumpPDLP::~DumpPDLP()
     memory->destroy(dump_charges);
     if (me==0) H5Dclose(charges_dset);    
   }
+  if (every_cell>=0) {
+    if (me==0) H5Dclose(cell_dset);    
+  }
   if (every_restart>=0 && me==0) {
     H5Dclose(rest_xyz_dset);    
     H5Dclose(rest_vel_dset);    
@@ -229,7 +239,9 @@ DumpPDLP::~DumpPDLP()
   if (me==0){
     H5Gclose(traj_group);
     H5Gclose(stage_group);
+    H5Gclose(restart_group);
     H5Fclose(pdlpfile);
+    printf("pdlp dump file closed\n");
   }
 }
 
@@ -246,12 +258,34 @@ void DumpPDLP::init_style()
 void DumpPDLP::openfile()
 {
   int dims[2];
- 
+
+  // DEBUG
+  int i;
+  ssize_t len;
+  hid_t root_group;
+  herr_t err;
+  hsize_t nobj;
+  char memb_name[256];
+
   if (me == 0) {
     // me == 0 _> do only on master node
     
     pdlpfile = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT);
+    printf("file %s opened \n", filename);
+
+    // DEBUG DBEUG
+    root_group = H5Gopen(pdlpfile, "/", H5P_DEFAULT);
+    err = H5Gget_num_objs(root_group, &nobj);
+    for (i = 0; i < nobj; i++) {
+      len = H5Gget_objname_by_idx(root_group, (hsize_t)i, memb_name, (size_t)256 );
+      printf("objname : %s\n", memb_name);
+    }
+    H5Gclose(root_group);
+    // DEBUG DEBUG
+
+    printf("group name %s\n", stage_name);
     stage_group = H5Gopen(pdlpfile, stage_name, H5P_DEFAULT);
+    printf("group %s opened\n", stage_name);
     traj_group  = H5Gopen(stage_group, "traj", H5P_DEFAULT);
     restart_group = H5Gopen(stage_group, "restart", H5P_DEFAULT);
     printf("pdlp file opened   %d %d %d %d\n", pdlpfile, stage_group, traj_group, restart_group);
@@ -275,6 +309,10 @@ void DumpPDLP::openfile()
     if (every_charges>0) {
       charges_dset = H5Dopen(traj_group, "charges", H5P_DEFAULT);
       printf("pdlp charges dset opened\n");
+    }
+    if (every_cell>0) {
+      cell_dset = H5Dopen(traj_group, "cell", H5P_DEFAULT);
+      printf("pdlp cell dset opened\n");
     }
     if (every_restart>0) {
       rest_xyz_dset = H5Dopen(restart_group, "xyz", H5P_DEFAULT);
