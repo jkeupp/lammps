@@ -44,6 +44,9 @@ class Thermo : protected Pointers {
   void compute(int);
   int evaluate_keyword(char *, double *);
 
+  //RS thermo_values .. is an array of doubles with the values usually dumped to screen
+  double *thermo_values;
+
  private:
   char *line;
   char **keyword;
@@ -84,6 +87,8 @@ class Thermo : protected Pointers {
   int *field2index;      // which compute,fix,variable calcs this field
   int *argindex1;        // indices into compute,fix scalar,vector
   int *argindex2;
+
+  double tvalue;         //RS double value to be written to thermo_value array
 
                          // data for keyword-specific Compute objects
                          // index = where they are in computes list

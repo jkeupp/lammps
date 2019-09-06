@@ -168,6 +168,10 @@ Thermo::Thermo(LAMMPS *lmp, int narg, char **arg) : Pointers(lmp)
   allocate();
   parse_fields(line);
 
+  //RS allocate thermo_values since nfield is now known
+  thermo_values = new double[nfield];
+  // printf("DEBUG: allocated %d fields for thermo_values\n" , nfield); 
+
   // format strings
 
   char *bigint_format = (char *) BIGINT_FORMAT;
@@ -378,12 +382,23 @@ void Thermo::compute(int flag)
 
   for (ifield = 0; ifield < nfield; ifield++) {
     (this->*vfunc[ifield])();
-    if (vtype[ifield] == FLOAT)
+    if (vtype[ifield] == FLOAT) {
       loc += sprintf(&line[loc],format[ifield],dvalue);
-    else if (vtype[ifield] == INT)
+      tvalue = dvalue;
+    }
+    else if (vtype[ifield] == INT) {
       loc += sprintf(&line[loc],format[ifield],ivalue);
-    else if (vtype[ifield] == BIGINT)
+      tvalue = ivalue;
+    }
+    else if (vtype[ifield] == BIGINT) {
       loc += sprintf(&line[loc],format[ifield],bivalue);
+      tvalue = bivalue;
+    }
+
+    //RS add values to array .. convert all to double first.
+    // printf("DEBUG add value %12.6f for field %d\n", tvalue, ifield);
+    thermo_values[ifield] = tvalue; 
+
   }
 
   // print line to screen and logfile
@@ -713,6 +728,9 @@ void Thermo::deallocate()
   for (int i = 0; i < nvariable; i++) delete [] id_variable[i];
   delete [] id_variable;
   delete [] variables;
+
+  //RS deallocating thermo_values
+  delete [] thermo_values;
 }
 
 /* ----------------------------------------------------------------------
