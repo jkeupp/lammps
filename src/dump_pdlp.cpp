@@ -37,6 +37,7 @@
 #include "force.h"
 #include "memory.h"
 #include "version.h"
+#include "thermo.h"
 
 using namespace LAMMPS_NS;
 
@@ -87,6 +88,7 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
   every_charges = -1;
   every_cell = -1;
   every_restart = -1;
+  every_thermo = -1;
 
   int iarg=5;
   int n_parsed, default_every;
@@ -152,6 +154,12 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
       n_parsed = element_args(narg-iarg, &arg[iarg], &every_restart);
       if (n_parsed<0) error->all(FLERR, "Illegal dump h5md command");
       iarg += n_parsed;
+    } else if (strcmp(arg[iarg], "thermo")==0) {
+      every_thermo = default_every;
+      iarg+=1;
+      n_parsed = element_args(narg-iarg, &arg[iarg], &every_thermo);
+      if (n_parsed<0) error->all(FLERR, "Illegal dump h5md command");
+      iarg += n_parsed;
     } else {
       printf("DEBUG iarg: %d arg[iarg] %s\n", iarg, arg[iarg]);
       error->all(FLERR, "Invalid argument to dump h5md");
@@ -165,7 +173,7 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
   printf("every_forces %d\n", every_forces);
   printf("every_charges %d\n", every_charges);
   printf("every_restart %d\n", every_restart);
-
+  printf("every_thermo %d\n", every_thermo);
 
 
   // allocate global array for atom coords
@@ -229,6 +237,9 @@ DumpPDLP::~DumpPDLP()
   }
   if (every_cell>=0) {
     if (me==0) H5Dclose(cell_dset);    
+  }
+  if (every_thermo>=0) {
+    if (me==0) H5Dclose(thermo_dset);    
   }
   if (every_restart>=0 && me==0) {
     H5Dclose(rest_xyz_dset);    
@@ -313,6 +324,10 @@ void DumpPDLP::openfile()
     if (every_cell>0) {
       cell_dset = H5Dopen(traj_group, "cell", H5P_DEFAULT);
       printf("pdlp cell dset opened\n");
+    }
+    if (every_thermo>0) {
+      thermo_dset = H5Dopen(traj_group, "thermo", H5P_DEFAULT);
+      printf("pdlp thermo dset opened\n");
     }
     if (every_restart>0) {
       rest_xyz_dset = H5Dopen(restart_group, "xyz", H5P_DEFAULT);
@@ -500,6 +515,11 @@ void DumpPDLP::write_frame()
   if (every_charges>0 && local_step % (every_charges*every_dump) == 0) {
     statcode = append_data(charges_dset, 2, dump_charges);
     printf("after append charges : %d\n" , statcode);
+  }
+  if (every_thermo>0 && local_step % (every_thermo*every_dump) == 0) {
+    // take array of thermo_values from thermo object (public array)
+    statcode = append_data(thermo_dset, 2, output->thermo->thermo_values);
+    printf("after append thermo : %d\n" , statcode);
   }
 
   if (every_restart>0){

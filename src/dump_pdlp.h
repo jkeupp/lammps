@@ -49,6 +49,7 @@ class DumpPDLP : public Dump {
   hid_t forces_dset;
   hid_t charges_dset;
   hid_t cell_dset;
+  hid_t thermo_dset;
 
   // data arrays and intervals
   int every_dump;
@@ -66,6 +67,7 @@ class DumpPDLP : public Dump {
   int every_cell;
 
   int every_restart;
+  int every_thermo;
 
   void init_style();
   int modify_param(int, char **);
