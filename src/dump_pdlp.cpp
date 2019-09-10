@@ -90,6 +90,8 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
   every_restart = -1;
   every_thermo = -1;
 
+  dump_count = 0; // this counter is only to syncronize the thermo dumping becasue thermo is done after dump in the cycle
+
   int iarg=5;
   int n_parsed, default_every;
   if (every_dump==0) default_every=0; else default_every=1;
@@ -166,14 +168,14 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
     }
   }
 
-  printf("every_xyz %d\n", every_xyz);
-  printf("every_image %d\n", every_image);
-  printf("every_vel %d\n", every_vel);
-  printf("every_cell %d\n", every_cell);
-  printf("every_forces %d\n", every_forces);
-  printf("every_charges %d\n", every_charges);
-  printf("every_restart %d\n", every_restart);
-  printf("every_thermo %d\n", every_thermo);
+  //printf("every_xyz %d\n", every_xyz);
+  //printf("every_image %d\n", every_image);
+  //printf("every_vel %d\n", every_vel);
+  //printf("every_cell %d\n", every_cell);
+  //printf("every_forces %d\n", every_forces);
+  //printf("every_charges %d\n", every_charges);
+  //printf("every_restart %d\n", every_restart);
+  //printf("every_thermo %d\n", every_thermo);
 
 
   // allocate global array for atom coords
@@ -183,23 +185,23 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
 
   if ((every_xyz>=0) || (every_restart>=0)) {
     memory->create(dump_xyz,domain->dimension*natoms,"dump:xyz");
-    printf ("dump:xyz allocated\n");
+    //printf ("dump:xyz allocated\n");
   }
   if (every_image>=0) {
     memory->create(dump_img,domain->dimension*natoms,"dump:xyz_img");
-    printf ("dump:xyz_img allocated\n");
+    //printf ("dump:xyz_img allocated\n");
   }
   if ((every_vel>=0) || (every_restart>=0)) {
     memory->create(dump_vel,domain->dimension*natoms,"dump:vel");
-    printf ("dump:vel allocated\n");
+    //printf ("dump:vel allocated\n");
   }
   if (every_forces>=0) {
     memory->create(dump_forces,domain->dimension*natoms,"dump:forces");
-    printf ("dump:forces allocated\n");
+    //printf ("dump:forces allocated\n");
   }
   if (every_charges>=0) {
     memory->create(dump_charges,natoms,"dump:charges");
-    printf ("dump:charges allocated\n");
+    //printf ("dump:charges allocated\n");
   }
   
 
@@ -212,7 +214,9 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
 
 DumpPDLP::~DumpPDLP()
 {
-  //  needs fixing!! RS
+
+  int statcode;
+
   if (every_xyz>=0 || every_restart>= 0) 
     memory->destroy(dump_xyz);
   if (every_xyz>=0) {
@@ -239,7 +243,12 @@ DumpPDLP::~DumpPDLP()
     if (me==0) H5Dclose(cell_dset);    
   }
   if (every_thermo>=0) {
-    if (me==0) H5Dclose(thermo_dset);    
+    if (me==0) {
+      // write one more frame of thermo data to wrap up (thermo is called after dump so the last step is missing)
+      statcode = append_data(thermo_dset, 2, output->thermo->thermo_values);
+      //printf("after append thermo : %d\n" , statcode);
+      H5Dclose(thermo_dset);
+    }    
   }
   if (every_restart>=0 && me==0) {
     H5Dclose(rest_xyz_dset);    
@@ -252,7 +261,7 @@ DumpPDLP::~DumpPDLP()
     H5Gclose(stage_group);
     H5Gclose(restart_group);
     H5Fclose(pdlpfile);
-    printf("pdlp dump file closed\n");
+    //printf("pdlp dump file closed\n");
   }
 }
 
@@ -282,9 +291,9 @@ void DumpPDLP::openfile()
     // me == 0 _> do only on master node
     
     pdlpfile = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT);
-    printf("file %s opened \n", filename);
+    //printf("file %s opened \n", filename);
 
-    // DEBUG DBEUG
+    /* // DEBUG DBEUG
     root_group = H5Gopen(pdlpfile, "/", H5P_DEFAULT);
     err = H5Gget_num_objs(root_group, &nobj);
     for (i = 0; i < nobj; i++) {
@@ -292,48 +301,47 @@ void DumpPDLP::openfile()
       printf("objname : %s\n", memb_name);
     }
     H5Gclose(root_group);
-    // DEBUG DEBUG
+    // DEBUG DEBUG */
 
-    printf("group name %s\n", stage_name);
     stage_group = H5Gopen(pdlpfile, stage_name, H5P_DEFAULT);
-    printf("group %s opened\n", stage_name);
+    //printf("group %s opened\n", stage_name);
     traj_group  = H5Gopen(stage_group, "traj", H5P_DEFAULT);
     restart_group = H5Gopen(stage_group, "restart", H5P_DEFAULT);
-    printf("pdlp file opened   %d %d %d %d\n", pdlpfile, stage_group, traj_group, restart_group);
+    //printf("pdlp file opened   %d %d %d %d\n", pdlpfile, stage_group, traj_group, restart_group);
 
     if (every_xyz>0) {
       xyz_dset    = H5Dopen(traj_group, "xyz", H5P_DEFAULT);
-      printf("pdlp xyz dset opened\n");
+      //printf("pdlp xyz dset opened\n");
     }
     if (every_image>0) {
       img_dset    = H5Dopen(traj_group, "imgidx", H5P_DEFAULT);
-      printf("pdlp img dset opened\n");
+      //printf("pdlp img dset opened\n");
     }
     if (every_vel>0) {
       vel_dset    = H5Dopen(traj_group, "vel", H5P_DEFAULT);
-      printf("pdlp vel dset opened\n");
+      //printf("pdlp vel dset opened\n");
     }
     if (every_forces>0) {
       forces_dset = H5Dopen(traj_group, "forces", H5P_DEFAULT);
-      printf("pdlp forces dset opened\n");
+      //printf("pdlp forces dset opened\n");
     }
     if (every_charges>0) {
       charges_dset = H5Dopen(traj_group, "charges", H5P_DEFAULT);
-      printf("pdlp charges dset opened\n");
+      //printf("pdlp charges dset opened\n");
     }
     if (every_cell>0) {
       cell_dset = H5Dopen(traj_group, "cell", H5P_DEFAULT);
-      printf("pdlp cell dset opened\n");
+      //printf("pdlp cell dset opened\n");
     }
     if (every_thermo>0) {
       thermo_dset = H5Dopen(traj_group, "thermo", H5P_DEFAULT);
-      printf("pdlp thermo dset opened\n");
+      //printf("pdlp thermo dset opened\n");
     }
     if (every_restart>0) {
       rest_xyz_dset = H5Dopen(restart_group, "xyz", H5P_DEFAULT);
       rest_vel_dset = H5Dopen(restart_group, "vel", H5P_DEFAULT);
       rest_cell_dset = H5Dopen(restart_group, "cell", H5P_DEFAULT);
-      printf("pdlp restart dsets opened\n");
+      //printf("pdlp restart dsets opened\n");
     }
 
     dims[0] = natoms;
@@ -484,54 +492,87 @@ void DumpPDLP::write_frame()
   local_step = update->ntimestep;
   local_time = local_step * update->dt;
   for (i=0; i<9; i++) cell[i] = 0.0;
-  cell[0] = boxxhi - boxxlo;
-  cell[4] = boxyhi - boxylo;
-  cell[8] = boxzhi - boxzlo;
-  if (domain->triclinic!=0) {
-    // this is a triclinic simulation so write the offdiag values
-    cell[3] = boxxy;
-    cell[6] = boxxz;
-    cell[7] = boxyz; 
+  if (!domain->triclinic) {
+    //RS we follow here the computes in thermo 
+    // orthorombic box
+    cell[0] = domain->xprd;
+    cell[4] = domain->yprd;
+    cell[8] = domain->zprd;
+  } else {
+    // triclinic box: use domain->h[6] which is cell in Voigt notation
+    // REMARK: in molsys the convention is to have the three vactors a,b,c as rows(!) of the cell matrix
+    //         so we have to transpose
+    // diagonal
+    cell[0] = domain->h[0];
+    cell[4] = domain->h[1];
+    cell[8] = domain->h[2];
+    // off-diagonal
+    cell[3] = domain->h[3];
+    cell[6] = domain->h[4];
+    cell[7] = domain->h[5];    
   }
   
   if (every_xyz>0) {
     if (local_step % (every_xyz*every_dump) == 0) {
-      statcode = append_data(xyz_dset, 3, dump_xyz);
-      printf("after append xyz : %d\n" , statcode);
+      if (dump_count == 0) {
+       statcode = write_data(xyz_dset, 3, dump_xyz); 
+      }
+      else {
+       statcode = append_data(xyz_dset, 3, dump_xyz); 
+      }
     }
   }
   if (every_cell>0 && local_step % (every_cell*every_dump) == 0) {
-    statcode = append_data(cell_dset, 3, cell);
-    printf("after append cell : %d\n" , statcode);
+    if (dump_count == 0) {
+      statcode = write_data(cell_dset, 3, cell); 
+    }
+    else {
+      statcode = append_data(cell_dset, 3, cell); 
+    }
   }  
   if (every_vel>0 && local_step % (every_vel*every_dump) == 0) {
-    statcode = append_data(vel_dset, 3, dump_vel);
-    printf("after append vel : %d\n" , statcode);
+    if (dump_count == 0) {
+      statcode = write_data(vel_dset, 3, dump_vel); 
+    }
+    else {
+      statcode = append_data(vel_dset, 3, dump_vel); 
+    }
   }
   if (every_forces>0 && local_step % (every_forces*every_dump) == 0) {
-    statcode = append_data(forces_dset, 3, dump_forces);
-    printf("after append forces : %d\n" , statcode);
+    if (dump_count == 0) {
+      statcode = write_data(forces_dset, 3, dump_forces); 
+    }
+    else {
+      statcode = append_data(forces_dset, 3, dump_forces); 
+    }
   }
   if (every_charges>0 && local_step % (every_charges*every_dump) == 0) {
-    statcode = append_data(charges_dset, 2, dump_charges);
-    printf("after append charges : %d\n" , statcode);
+    if (dump_count == 0) {
+      statcode = write_data(charges_dset, 3, dump_charges); 
+    }
+    else {
+      statcode = append_data(charges_dset, 3, dump_charges); 
+    }
   }
   if (every_thermo>0 && local_step % (every_thermo*every_dump) == 0) {
     // take array of thermo_values from thermo object (public array)
-    statcode = append_data(thermo_dset, 2, output->thermo->thermo_values);
-    printf("after append thermo : %d\n" , statcode);
+    if (dump_count == 1) {
+      statcode = write_data(thermo_dset, 2, output->thermo->thermo_values);
+    } else if (dump_count > 1) {
+      statcode = append_data(thermo_dset, 2, output->thermo->thermo_values);
+    }
   }
 
   if (every_restart>0){
     if (local_step % (every_restart*every_dump) == 0) {
       statcode = write_data(rest_xyz_dset, 2, dump_xyz);
-      printf("after write restart \n");
       statcode = write_data(rest_vel_dset, 2, dump_vel);
-      printf("after write restart \n");
       statcode = write_data(rest_cell_dset, 2, cell);
-      printf("after write restart \n");
     }
   }
+
+  // increment counter
+  dump_count += 1;
 }
 
 int DumpPDLP::append_data(hid_t dset, int rank, double *dump)

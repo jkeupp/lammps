@@ -69,6 +69,8 @@ class DumpPDLP : public Dump {
   int every_restart;
   int every_thermo;
 
+  int dump_count;
+
   void init_style();
   int modify_param(int, char **);
   void openfile();
