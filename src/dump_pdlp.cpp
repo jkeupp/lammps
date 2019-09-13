@@ -168,6 +168,14 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
     }
   }
 
+  // fix up size_one becasue we need space for xyz/val in case only restart is chosen
+  if (every_restart > 0) {
+    if (every_xyz <0) size_one+=domain->dimension;
+    if (every_vel <0) size_one+=domain->dimension;
+  }
+
+  //printf ("size_one is %d\n", size_one);
+
   //printf("every_xyz %d\n", every_xyz);
   //printf("every_image %d\n", every_image);
   //printf("every_vel %d\n", every_vel);
@@ -381,7 +389,7 @@ void DumpPDLP::pack(tagint *ids)
   m = n = 0;
   for (int i = 0; i < nlocal; i++)
     if (mask[i] & groupbit) {
-      if (every_xyz>=0) {
+      if (every_xyz>=0 || every_restart>=0) {
         int ix = (image[i] & IMGMASK) - IMGMAX;
         int iy = (image[i] >> IMGBITS & IMGMASK) - IMGMAX;
         int iz = (image[i] >> IMG2BITS) - IMGMAX;
@@ -400,7 +408,7 @@ void DumpPDLP::pack(tagint *ids)
           if (dim>2) buf[m++] = iz;
         }
       }
-      if (every_vel>=0) {
+      if (every_vel>=0 || every_restart>=0) {
         buf[m++] = v[i][0];
         buf[m++] = v[i][1];
         if (dim>2) buf[m++] = v[i][2];
@@ -454,7 +462,7 @@ void DumpPDLP::write_data(int n, double *mybuf)
   // if last chunk of atoms in this snapshot, write global arrays to file
 
   if (ntotal == natoms) {
-    if (every_xyz>0) {
+    if (every_xyz>0 || every_restart>0) {
       write_frame();
       ntotal = 0;
     } 
