@@ -35,6 +35,11 @@ class FixReaxCBonds : public Fix {
   void setup(int);
   void end_of_step();
 
+  //RS
+  int    *bondtab;
+  double *bondord;
+  int     nbondmax;
+
  protected:
   int me, nprocs, nmax, ntypes, maxsize;
   int *numneigh;

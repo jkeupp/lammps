@@ -27,6 +27,9 @@ DumpStyle(pdlp,DumpPDLP)
 #include "dump.h"
 #include "hdf5.h"
 
+#include "fix.h"
+#include "fix_reaxc_bonds.h"
+
 
 namespace LAMMPS_NS {
 
@@ -50,6 +53,8 @@ class DumpPDLP : public Dump {
   hid_t charges_dset;
   hid_t cell_dset;
   hid_t thermo_dset;
+  hid_t bondtab_dset;
+  hid_t bondord_dset;
 
   // data arrays and intervals
   int every_dump;
@@ -68,8 +73,11 @@ class DumpPDLP : public Dump {
 
   int every_restart;
   int every_thermo;
+  int every_bond;
 
   int dump_count;
+
+  FixReaxCBonds *rxbfix;
 
   void init_style();
   int modify_param(int, char **);
@@ -81,6 +89,8 @@ class DumpPDLP : public Dump {
   void write_frame();
   int append_data(hid_t, int, double *);
   int write_data(hid_t, int, double *);
+  int append_data_int(hid_t, int, int *);
+  int write_data_int(hid_t, int, int *);
 };
 
 }

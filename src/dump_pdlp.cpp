@@ -39,6 +39,9 @@
 #include "version.h"
 #include "thermo.h"
 
+#include "fix_reaxc_bonds.h"
+#include "modify.h"
+
 using namespace LAMMPS_NS;
 
 #define MYMIN(a,b) ((a) < (b) ? (a) : (b))
@@ -89,6 +92,7 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
   every_cell = -1;
   every_restart = -1;
   every_thermo = -1;
+  every_bond = -1;
 
   dump_count = 0; // this counter is only to syncronize the thermo dumping becasue thermo is done after dump in the cycle
 
@@ -162,6 +166,12 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
       n_parsed = element_args(narg-iarg, &arg[iarg], &every_thermo);
       if (n_parsed<0) error->all(FLERR, "Illegal dump h5md command");
       iarg += n_parsed;
+    } else if (strcmp(arg[iarg], "bond")==0) {
+      every_bond = default_every;
+      iarg+=1;
+      n_parsed = element_args(narg-iarg, &arg[iarg], &every_bond);
+      if (n_parsed<0) error->all(FLERR, "Illegal dump h5md command");
+      iarg += n_parsed;
     } else {
       printf("DEBUG iarg: %d arg[iarg] %s\n", iarg, arg[iarg]);
       error->all(FLERR, "Invalid argument to dump h5md");
@@ -173,6 +183,11 @@ DumpPDLP::DumpPDLP(LAMMPS *lmp, int narg, char **arg) : Dump(lmp, narg, arg)
     if (every_xyz <0) size_one+=domain->dimension;
     if (every_vel <0) size_one+=domain->dimension;
   }
+
+  // if bond are written get corresponding fix
+  // TBI check if fix exists .. we should take care for this with pylmps but a safety check would be good
+  rxbfix = (FixReaxCBonds *) modify->fix[modify->find_fix_by_style("reax/c/bonds")];
+  //printf("DEBUG DEBUG size of nmaxbonds %d\n", rxbfix->nbondmax);
 
   //printf ("size_one is %d\n", size_one);
 
@@ -258,7 +273,12 @@ DumpPDLP::~DumpPDLP()
       H5Dclose(thermo_dset);
     }    
   }
-  if (every_restart>=0 && me==0) {
+  if (every_bond>=0) {
+    if (me==0) {
+      H5Dclose(bondtab_dset);
+      H5Dclose(bondord_dset);
+    }    
+  }  if (every_restart>=0 && me==0) {
     H5Dclose(rest_xyz_dset);    
     H5Dclose(rest_vel_dset);    
     H5Dclose(rest_cell_dset);    
@@ -344,6 +364,11 @@ void DumpPDLP::openfile()
     if (every_thermo>0) {
       thermo_dset = H5Dopen(traj_group, "thermo", H5P_DEFAULT);
       //printf("pdlp thermo dset opened\n");
+    }
+    if (every_bond>0) {
+      bondtab_dset = H5Dopen(traj_group, "bondtab", H5P_DEFAULT);
+      bondord_dset = H5Dopen(traj_group, "bondord", H5P_DEFAULT);
+      //printf("pdlp bond dset opened\n");
     }
     if (every_restart>0) {
       rest_xyz_dset = H5Dopen(restart_group, "xyz", H5P_DEFAULT);
@@ -556,10 +581,10 @@ void DumpPDLP::write_frame()
   }
   if (every_charges>0 && local_step % (every_charges*every_dump) == 0) {
     if (dump_count == 0) {
-      statcode = write_data(charges_dset, 3, dump_charges); 
+      statcode = write_data(charges_dset, 2, dump_charges); 
     }
     else {
-      statcode = append_data(charges_dset, 3, dump_charges); 
+      statcode = append_data(charges_dset, 2, dump_charges); 
     }
   }
   if (every_thermo>0 && local_step % (every_thermo*every_dump) == 0) {
@@ -570,6 +595,17 @@ void DumpPDLP::write_frame()
       statcode = append_data(thermo_dset, 2, output->thermo->thermo_values);
     }
   }
+  if (every_bond>0 && local_step % (every_bond*every_dump) == 0) {
+    // take array of thermo_values from thermo object (public array)
+    if (dump_count == 0) {
+      statcode = write_data_int(bondtab_dset, 3, rxbfix->bondtab);
+      statcode = write_data(bondord_dset, 2, rxbfix->bondord);
+    } else {
+      statcode = append_data_int(bondtab_dset, 3, rxbfix->bondtab);
+      statcode = append_data(bondord_dset, 2, rxbfix->bondord);
+    }
+  }
+
 
   if (every_restart>0){
     if (local_step % (every_restart*every_dump) == 0) {
@@ -581,6 +617,9 @@ void DumpPDLP::write_frame()
 
   // increment counter
   dump_count += 1;
+
+
+  //printf ("This is dump_pdlp in timestp %d\n", local_step);
 }
 
 int DumpPDLP::append_data(hid_t dset, int rank, double *dump)
@@ -637,6 +676,67 @@ int DumpPDLP::write_data(hid_t dset, int rank, double *dump)
   
   // write the data
   status = H5Dwrite(dset, H5T_IEEE_F64LE, H5S_ALL, H5S_ALL, H5P_DEFAULT, dump);
+  if (status<0){
+    printf("Writing data went wrong! status is %d\n", status);
+    return -3;
+  }      
+return 0;
+}
+
+int DumpPDLP::append_data_int(hid_t dset, int rank, int *dump)
+{
+  herr_t  status;
+  hsize_t dims[rank], start[rank], count[rank];
+  hid_t   fspace, mspace;
+  int i;
+  
+  fspace = H5Dget_space(dset);
+  // get current dims
+  H5Sget_simple_extent_dims(fspace, dims, NULL);
+  // increment by one frame
+  dims[0] += 1;
+  status = H5Dset_extent(dset, dims);
+  H5Sclose(fspace);
+  if (status<0){
+    printf("Extending pdlp dataset went wrong! status is %d\n", status);
+    return -1;
+  }
+  // Now get fspace again
+  fspace = H5Dget_space(dset);
+  // create start and offset
+  start[0] = dims[0]-1;
+  count[0] = 1;
+  for (i=1; i<rank; i++) {
+    start[i] = 0;
+    count[i] = dims[i];
+  }
+  // select part of file to be writen
+  status = H5Sselect_hyperslab(fspace, H5S_SELECT_SET, start, NULL, count, NULL);
+  if (status<0){
+    printf("Selecting hyperslab went wrong! status is %d\n", status);
+    H5Sclose(fspace);
+    return -2;
+  }
+  // generate a mspace for the data in memory
+  mspace = H5Screate_simple(rank-1, dims+1, NULL);
+  // write the data
+  status = H5Dwrite(dset, H5T_STD_I32LE, mspace, fspace, H5P_DEFAULT, dump);
+  // close selections
+  H5Sclose(fspace);
+  H5Sclose(mspace);
+  if (status<0){
+    printf("Writing data went wrong! status is %d\n", status);
+    return -3;
+  }      
+return 0;
+}
+
+int DumpPDLP::write_data_int(hid_t dset, int rank, int *dump)
+{
+  herr_t  status;
+  
+  // write the data
+  status = H5Dwrite(dset, H5T_STD_I32LE, H5S_ALL, H5S_ALL, H5P_DEFAULT, dump);
   if (status<0){
     printf("Writing data went wrong! status is %d\n", status);
     return -3;

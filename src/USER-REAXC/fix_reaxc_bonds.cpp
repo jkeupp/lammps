@@ -45,14 +45,24 @@ using namespace FixConst;
 FixReaxCBonds::FixReaxCBonds(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
-  if (narg != 5) error->all(FLERR,"Illegal fix reax/c/bonds command");
+  nbondmax = 0;
+  //RS additional options for pdlp dump of bonds
+  if (narg == 7) {
+    if (strcmp(arg[5],"pdlp") != 0) error->all(FLERR, "Illegal fix reax/c/bonds command 1");
+    nbondmax = force->inumeric(FLERR,arg[6]);
+    if (nbondmax < 0 )
+      error->all(FLERR,"Illegal fix reax/c/bonds command 2");
+
+  }
+  //RS
+  else if (narg != 5) error->all(FLERR,"Illegal fix reax/c/bonds command 3");
 
   MPI_Comm_rank(world,&me);
   MPI_Comm_size(world,&nprocs);
   ntypes = atom->ntypes;
   nmax = atom->nmax;
 
-  nevery = force->inumeric(FLERR,arg[3]);
+  nevery = force->inumeric(FLERR,arg[3]); 
 
   if (nevery <= 0 )
     error->all(FLERR,"Illegal fix reax/c/bonds command");
@@ -270,6 +280,9 @@ void FixReaxCBonds::RecvBuffer(double *buf, int nbuf, int nbuf_local,
   double cutof3 = reaxc->control->bg_cut;
   MPI_Request irequest, irequest2;
 
+  //RS
+  int bi, nj;
+
   if (me == 0 ){
     fprintf(fp,"# Timestep " BIGINT_FORMAT " \n",ntimestep);
     fprintf(fp,"# \n");
@@ -280,6 +293,9 @@ void FixReaxCBonds::RecvBuffer(double *buf, int nbuf, int nbuf_local,
     fprintf(fp,"# Particle connection table and bond orders \n");
     fprintf(fp,"# id type nb id_1...id_nb mol bo_1...bo_nb abo nlp q \n");
   }
+
+  //RS
+  bi = 0;
 
   j = 2;
   if (me == 0) {
@@ -317,6 +333,26 @@ void FixReaxCBonds::RecvBuffer(double *buf, int nbuf, int nbuf_local,
         }
         j += (1+numbonds);
         fprintf(fp,"%14.3f%14.3f%14.3f\n",sbotmp,nlptmp,avqtmp);
+
+        //RS write bonds to bontab/bondord for pdlp dumping if nbondmax >0
+        if (nbondmax > 0) {
+          // need to get nj to point to the right entry in buf again
+          nj = j - 2 - (2*numbonds);
+          for (k = 0; k < numbonds; k++) {
+            jtag = static_cast<tagint> (buf[nj+k]);
+            // save only if jtag > itag and if bi smaller than nbondmax
+            if (jtag > itag && bi<nbondmax){
+              bondtab[bi*2]   = itag;
+              bondtab[bi*2+1] = jtag;
+              bondord[bi]     = buf[nj+1+numbonds+k];
+
+              //printf("DEBUG §§ %5d %5d %5d %12.3f\n", bi, itag, jtag, bondord[bi]);
+
+              bi += 1;
+            }
+          }
+        }
+        //RS end
       }
     }
   } else {
@@ -324,6 +360,8 @@ void FixReaxCBonds::RecvBuffer(double *buf, int nbuf, int nbuf_local,
     MPI_Wait(&irequest2,MPI_STATUS_IGNORE);
   }
   if(me ==0) fprintf(fp,"# \n");
+
+  //if(me==0) printf("DEBUG this is fix reax/c/bond in timestep %d\n", ntimestep);
 
 }
 
@@ -344,6 +382,11 @@ void FixReaxCBonds::destroy()
   memory->destroy(abo);
   memory->destroy(neighid);
   memory->destroy(numneigh);
+  //RS
+  if (me == 0) {
+    delete [] bondtab;
+    delete [] bondord;
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -353,6 +396,11 @@ void FixReaxCBonds::allocate()
   memory->create(abo,nmax,MAXREAXBOND,"reax/c/bonds:abo");
   memory->create(neighid,nmax,MAXREAXBOND,"reax/c/bonds:neighid");
   memory->create(numneigh,nmax,"reax/c/bonds:numneigh");
+  //RS allocate bondtab only on master
+  if (me==0){
+    bondtab = new int[nbondmax*2];
+    bondord = new double[nbondmax];
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -365,6 +413,5 @@ double FixReaxCBonds::memory_usage()
   bytes += nmax*sizeof(int);
   bytes += 1.0*nmax*MAXREAXBOND*sizeof(double);
   bytes += 1.0*nmax*MAXREAXBOND*sizeof(int);
-
   return bytes;
 }
