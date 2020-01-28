@@ -443,6 +443,10 @@ void DumpPDLP::pack(tagint *ids)
         buf[m++] = f[i][1];
         if (dim>2) buf[m++] = f[i][2];
       }
+      if (every_charges>=0) {
+        buf[m++] = q[i];
+      }
+
       ids[n++] = tag[i];
     }
 }
