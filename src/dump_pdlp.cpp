@@ -618,7 +618,7 @@ void DumpPDLP::write_frame()
   // increment counter
   dump_count += 1;
 
-
+  H5Fflush(pdlpfile, H5F_SCOPE_GLOBAL);
   //printf ("This is dump_pdlp in timestp %d\n", local_step);
 }
 
