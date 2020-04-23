@@ -294,9 +294,18 @@ void FixReaxCBonds::RecvBuffer(double *buf, int nbuf, int nbuf_local,
     fprintf(fp,"# id type nb id_1...id_nb mol bo_1...bo_nb abo nlp q \n");
   }
 
-  //RS
-  bi = 0;
-
+  
+  // RS: init the complete copy buffer for bondord and bondtab
+  if (me == 0) {
+    for (i = 0; i < nbondmax; i++){
+      bondtab[i*2]   = 0;
+      bondtab[i*2+1] = 0;
+      bondord[i]     = -1.0;
+    }
+  }
+  // RS
+  
+  bi = 0;  //RS
   j = 2;
   if (me == 0) {
     for (inode = 0; inode < nprocs; inode ++) {
