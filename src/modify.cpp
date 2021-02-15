@@ -42,7 +42,7 @@ using namespace FixConst;
 Modify::Modify(LAMMPS *lmp) : Pointers(lmp)
 {
   nfix = maxfix = 0;
-  n_initial_integrate = n_post_integrate = 0;
+  n_initial_integrate = n_second_integrate = n_third_integrate = n_post_integrate = 0;
   n_pre_exchange = n_pre_neighbor = n_post_neighbor = 0;
   n_pre_force = n_pre_reverse = n_post_force = 0;
   n_final_integrate = n_end_of_step = n_thermo_energy = 0;
@@ -54,7 +54,7 @@ Modify::Modify(LAMMPS *lmp) : Pointers(lmp)
 
   fix = NULL;
   fmask = NULL;
-  list_initial_integrate = list_post_integrate = NULL;
+  list_initial_integrate = list_second_integrate = list_third_integrate = list_post_integrate = NULL;
   list_pre_exchange = list_pre_neighbor = list_post_neighbor = NULL;
   list_pre_force = list_pre_reverse = list_post_force = NULL;
   list_final_integrate = list_end_of_step = NULL;
@@ -126,6 +126,8 @@ Modify::~Modify()
   memory->sfree(compute);
 
   delete [] list_initial_integrate;
+  delete [] list_second_integrate;
+  delete [] list_third_integrate;
   delete [] list_post_integrate;
   delete [] list_pre_exchange;
   delete [] list_pre_neighbor;
@@ -207,6 +209,8 @@ void Modify::init()
   //   b/c a compute::init() can delete a fix, e.g. compute chunk/atom
 
   list_init(INITIAL_INTEGRATE,n_initial_integrate,list_initial_integrate);
+  list_init(SECOND_INTEGRATE,n_second_integrate,list_second_integrate);
+  list_init(THIRD_INTEGRATE,n_third_integrate,list_third_integrate);
   list_init(POST_INTEGRATE,n_post_integrate,list_post_integrate);
   list_init(PRE_EXCHANGE,n_pre_exchange,list_pre_exchange);
   list_init(PRE_NEIGHBOR,n_pre_neighbor,list_pre_neighbor);
@@ -396,6 +400,18 @@ void Modify::initial_integrate(int vflag)
 {
   for (int i = 0; i < n_initial_integrate; i++)
     fix[list_initial_integrate[i]]->initial_integrate(vflag);
+}
+
+void Modify::second_integrate(int vflag)
+{
+  for (int i = 0; i < n_second_integrate; i++)
+    fix[list_second_integrate[i]]->second_integrate(vflag);
+}
+
+void Modify::third_integrate(int vflag)
+{
+  for (int i = 0; i < n_third_integrate; i++)
+    fix[list_third_integrate[i]]->third_integrate(vflag);
 }
 
 /* ----------------------------------------------------------------------
